@@ -1,0 +1,18 @@
+# Extracting the public key from the certificate
+openssl x509 -inform der -pubkey -noout -in alice_cert.cer -out alice_public_key.pem
+# Decrypting message_1.enc using IV (first 8 bytes) and key (last 8 bytes) from key_1.hex
+openssl enc -d -des-cfb -in message_1.enc -K $(cat key_1.hex | tail -c 16) -iv $(cat key_1.hex | head -c 16) -provider legacy -provider default -out message_1.txt
+# Generating 48 bytes randomly to use as IV (first 16 bytes) and key (last 32 bytes) for message_2.enc
+openssl rand -hex 48 | tr -d '\n' > key_2.hex
+# Encrypting key_2.hex using Alice's public key
+openssl pkeyutl -encrypt -in key_2.hex -out key_2.hex.enc -inkey alice_public_key.pem -pubin
+# Encrypting message_2.txt using AES-256-CBC with IV and key from key_2.hex
+openssl enc -aes-256-cbc -in message_2.txt -K "$(cat key_2.hex | tail -c 64)" -iv "$(cat key_2.hex | head -c 32)" -out message_2.enc
+# Extracting bob's key pair from bob_cert.pfx which is created by Actalis
+openssl pkcs12 -in bob_cert.pfx -nocerts -out bob_keys.key
+openssl rsa -in bob_keys.key -out bob_private_key.pem
+openssl rsa -in bob_keys.key -pubout -out bob_public.pem
+# Signing message_2.txt using SHA3-256 and bob's private key
+openssl dgst -sha3-256 -sign bob_private_key.pem -out message_2.sign.sha3256 message_2.txt
+# Verifying message_2.sign.sha3256 using SHA3-256 and bob's public key
+openssl dgst -sha3-256 -verify bob_public.pem -signature message_2.sign.sha3256 message_2.txt
